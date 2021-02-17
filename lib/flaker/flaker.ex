@@ -39,25 +39,24 @@ defmodule Flaker do
 
   defp from_args(args) when is_list(args) do
     {last_item, remainder} = List.pop_at(args, -1)
-    extract_test_runs(last_item, remainder)
+
+    if Regex.match?(~r/^\d+$/, last_item) do
+      extract_test_runs(last_item, remainder)
+    else
+      {rebuild_list_as_string(last_item, remainder), @default_test_runs}
+    end
   end
 
-  defp extract_test_runs(last_item, remainder) do
-    cond do
-      Regex.match?(~r/^\d+$/, last_item) ->
-        last_item
-        |> String.to_integer()
-        |> abs()
-        |> case do
-          test_runs when test_runs > 999 ->
-            {Enum.join(remainder, " "), test_runs}
+  defp extract_test_runs(last_item, remainder) when is_list(remainder) do
+    test_runs =
+      last_item
+      |> String.to_integer()
+      |> abs()
 
-          _ ->
-            {rebuild_list_as_string(last_item, remainder), @default_test_runs}
-        end
-
-      true ->
-        {rebuild_list_as_string(last_item, remainder), @default_test_runs}
+    if test_runs > 99_999 or test_runs == 0 do
+      {rebuild_list_as_string(last_item, remainder), @default_test_runs}
+    else
+      {Enum.join(remainder, " "), test_runs}
     end
   end
 
