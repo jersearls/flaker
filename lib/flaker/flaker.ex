@@ -19,38 +19,50 @@ defmodule Flaker do
     IO.puts("Running tests #{number_of_runs} times.....")
 
     1..number_of_runs
-    |> Enum.map(fn _n -> shell_command(task) end)
+    |> Enum.map(fn run_number -> shell_command(task, run_number) end)
     |> calculate_results(number_of_runs)
   end
 
   defp calculate_results(test_results, number_of_runs) do
+    acc = %{failure_number: 0, success_number: 0, failure_text: []}
+
     tally =
-      Enum.reduce(test_results, %{failure: 0, success: 0}, fn x, acc ->
-        Map.update(acc, x, 1, &(&1 + 1))
+      Enum.reduce(test_results, acc, fn
+        {:success, _}, acc ->
+          Map.update!(acc, :success_number, &(&1 + 1))
+
+        {:failure, failure_string}, acc ->
+          acc
+          |> Map.update!(:failure_number, &(&1 + 1))
+          |> Map.update!(:failure_text, fn existing_list -> [failure_string | existing_list] end)
       end)
 
-    IO.puts("#{number_of_runs} test runs performed")
+    IO.puts("\n#{number_of_runs} test runs performed.\n")
     IO.puts("Results:")
-    put_color_text(IO.ANSI.green(), "#{tally.success} successful run(s)")
-    put_color_text(IO.ANSI.red(), "#{tally.failure} failed run(s)")
+    put_color_text(:green, "#{tally.success_number} successful run(s)")
+    put_color_text(:red, "#{tally.failure_number} failed run(s)")
+    # IO.inspect(tally.failure_text)
   end
 
-  defp shell_command(task) do
+  defp shell_command(task, run_number) do
     "mix"
     |> System.cmd(["test" | task], env: [{"MIX_ENV", "test"}])
     |> case do
       {_, 0} ->
-        put_color_text(IO.ANSI.green(), ".")
-        :success
+        put_color_text(:green, "#{run_number}")
+        {:success, nil}
 
-      {_, 1} ->
-        put_color_text(IO.ANSI.red(), ".")
-        :failure
+      {failure_text, 1} ->
+        put_color_text(:red, "#{run_number}")
+        # TODO write a parser to split up failure text into a map
+        # with list of strings for each failed test
+        # %{test_output: ["test 1", "test 2"], seed:""}
+        {:failure, failure_text}
     end
   end
 
   def put_color_text(color, text) do
-    IO.puts(color <> text <> IO.ANSI.reset())
+    IO.puts(apply(IO.ANSI, color, []) <> text <> IO.ANSI.reset())
   end
 
   defp from_args([]), do: {[], @default_test_runs}
