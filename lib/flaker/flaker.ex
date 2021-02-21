@@ -2,11 +2,7 @@ defmodule Flaker do
   @moduledoc """
   Contains functions that are called when running `mix test.flaker`
   """
-
-  use Application
-
-  @default_test_runs 20
-  @ansi "run -e 'Application.put_env(:elixir, :ansi_enabled, true);'"
+  @default_test_runs 5
 
   @doc """
   Delegated function called when `mix test.flake` is run
@@ -14,28 +10,50 @@ defmodule Flaker do
   @spec run([String.t()]) :: no_return
   def run(args \\ []) do
     Mix.env(:test)
-    IO.puts("Running tests.....")
-    IO.puts(shell_command(args))
-    # # :ok = Application.ensure_started(:mix_test_watch)
-    # Watcher.run_tasks()
+    run_tests(args)
   end
 
-  defp shell_command(args) do
-    command = build_task_command(args)
+  defp run_tests(args) do
+    {task, number_of_runs} = from_args(args)
 
-    command
-    # Path.join(:code.priv_dir(:mix_test_watch), "zombie_killer")
-    # |> System.cmd(["sh", "-c", command], into: IO.stream(:stdio, :line))
-    # System.cmd(["sh", "-c", command])
+    IO.puts("Running tests #{number_of_runs} times.....")
+
+    1..number_of_runs
+    |> Enum.map(fn _n -> shell_command(task) end)
+    |> calculate_results(number_of_runs)
   end
 
-  defp build_task_command(args) do
-    {task, _number_of_runs} = from_args(args)
+  defp calculate_results(test_results, number_of_runs) do
+    tally =
+      Enum.reduce(test_results, %{failure: 0, success: 0}, fn x, acc ->
+        Map.update(acc, x, 1, &(&1 + 1))
+      end)
 
-    "MIX_ENV=test mix do #{@ansi}, #{task}"
+    IO.puts("#{number_of_runs} test runs performed")
+    IO.puts("Results:")
+    put_color_text(IO.ANSI.green(), "#{tally.success} successful run(s)")
+    put_color_text(IO.ANSI.red(), "#{tally.failure} failed run(s)")
   end
 
-  defp from_args([]), do: {"", @default_test_runs}
+  defp shell_command(task) do
+    "mix"
+    |> System.cmd(["test" | task], env: [{"MIX_ENV", "test"}])
+    |> case do
+      {_, 0} ->
+        put_color_text(IO.ANSI.green(), ".")
+        :success
+
+      {_, 1} ->
+        put_color_text(IO.ANSI.red(), ".")
+        :failure
+    end
+  end
+
+  def put_color_text(color, text) do
+    IO.puts(color <> text <> IO.ANSI.reset())
+  end
+
+  defp from_args([]), do: {[], @default_test_runs}
 
   defp from_args(args) when is_list(args) do
     {last_item, remainder} = List.pop_at(args, -1)
@@ -43,7 +61,7 @@ defmodule Flaker do
     if Regex.match?(~r/^\d+$/, last_item) do
       extract_test_runs(last_item, remainder)
     else
-      {rebuild_list_as_string(last_item, remainder), @default_test_runs}
+      {rebuild_list(last_item, remainder), @default_test_runs}
     end
   end
 
@@ -54,26 +72,13 @@ defmodule Flaker do
       |> abs()
 
     if test_runs > 99_999 or test_runs == 0 do
-      {rebuild_list_as_string(last_item, remainder), @default_test_runs}
+      {rebuild_list(last_item, remainder), @default_test_runs}
     else
-      {Enum.join(remainder, " "), test_runs}
+      {remainder, test_runs}
     end
   end
 
-  defp rebuild_list_as_string(last_item, remainder) do
-    remainder
-    |> List.insert_at(-1, last_item)
-    |> Enum.join(" ")
+  defp rebuild_list(last_item, remainder) do
+    List.insert_at(remainder, -1, last_item)
   end
-
-  # def start(_type, _args) do
-  #   import Supervisor.Spec, warn: false
-
-  #   children = [
-  #     worker(Watcher, [])
-  #   ]
-
-  #   opts = [strategy: :one_for_one, name: Sup.Supervisor]
-  #   Supervisor.start_link(children, opts)
-  # end
 end
