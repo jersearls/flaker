@@ -24,24 +24,42 @@ defmodule Flaker do
   end
 
   defp calculate_results(test_results, number_of_runs) do
-    acc = %{failure_number: 0, success_number: 0, failure_text: []}
-
-    tally =
-      Enum.reduce(test_results, acc, fn
-        {:success, _}, acc ->
-          Map.update!(acc, :success_number, &(&1 + 1))
-
-        {:failure, failure_string}, acc ->
-          acc
-          |> Map.update!(:failure_number, &(&1 + 1))
-          |> Map.update!(:failure_text, fn existing_list -> [failure_string | existing_list] end)
-      end)
+    final_tally =
+      test_results
+      |> tally_results()
+      |> reduce_test_failures()
 
     IO.puts("\n#{number_of_runs} test runs performed.\n")
     IO.puts("Results:")
-    put_color_text(:green, "#{tally.success_number} successful run(s)")
-    put_color_text(:red, "#{tally.failure_number} failed run(s)")
-    # IO.inspect(tally.failure_text)
+    put_color_text(:green, "#{final_tally.success_number} successful run(s)")
+    put_color_text(:red, "#{final_tally.failure_number} failed run(s)")
+  end
+
+  defp tally_results(test_results) do
+    acc = %{failure_number: 0, success_number: 0, failing_tests: []}
+
+    Enum.reduce(test_results, acc, fn
+      {:success, _}, acc ->
+        Map.update!(acc, :success_number, &(&1 + 1))
+
+      {:failure, failure_string}, acc ->
+        acc
+        |> Map.update!(:failure_number, &(&1 + 1))
+        |> Map.update!(:failing_tests, fn existing_list -> [failure_string | existing_list] end)
+    end)
+  end
+
+  defp reduce_test_failures(tallied_results) do
+    {failing_tests, _new_tallied_results} = Map.pop!(tallied_results, :failing_tests)
+
+    # Gonna need a custom formatter to easily parse the output without tons
+    # of regex
+    failing_tests
+    |> IO.inspect()
+
+    # |> Enum.map()
+
+    tallied_results
   end
 
   defp shell_command(task, run_number) do

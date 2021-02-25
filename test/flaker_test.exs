@@ -7,6 +7,14 @@ defmodule FlakerTest do
     assert true
   end
 
+  test "failing test" do
+    assert false
+  end
+
+  test "another failing test" do
+    assert false
+  end
+
   test "flakey test" do
     random_number = Enum.random(0..100)
 
